@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Artemis Live</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0a0a12;
+      color: #e0e0e0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .stream-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem 1rem 0;
+      min-height: 0;
+    }
+
+    .stream-wrapper {
+      width: 100%;
+      max-width: 1400px;
+      aspect-ratio: 16 / 9;
+      max-height: calc(100vh - 100px);
+      position: relative;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 0 60px rgba(30, 80, 180, 0.15);
+    }
+
+    .stream-wrapper iframe {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+
+    .music-bar {
+      height: 64px;
+      background: rgba(15, 15, 25, 0.95);
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      display: flex;
+      align-items: center;
+      padding: 0 1.5rem;
+      gap: 1rem;
+      backdrop-filter: blur(12px);
+    }
+
+    .music-thumb {
+      width: 40px;
+      height: 40px;
+      border-radius: 4px;
+      overflow: hidden;
+      flex-shrink: 0;
+      background: #1a1a2a;
+    }
+
+    .music-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .music-info {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 0.15rem;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .music-title {
+      font-size: 0.8rem;
+      color: #ccc;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: opacity 0.3s;
+    }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    button {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #ddd;
+      padding: 0.4rem 0.75rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      white-space: nowrap;
+    }
+
+    button:hover { background: rgba(255, 255, 255, 0.14); }
+    button:active { transform: scale(0.97); }
+
+    button.active {
+      background: rgba(60, 130, 246, 0.25);
+      border-color: rgba(60, 130, 246, 0.4);
+      color: #7cb3ff;
+    }
+
+    .duck-btn.ducked {
+      background: rgba(234, 179, 8, 0.2);
+      border-color: rgba(234, 179, 8, 0.35);
+      color: #f0d060;
+    }
+
+    .volume-group {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .volume-icon {
+      font-size: 0.85rem;
+      color: #888;
+      cursor: pointer;
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      width: 100px;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 2px;
+      outline: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #7cb3ff;
+      cursor: pointer;
+    }
+
+    .kbd {
+      font-size: 0.65rem;
+      padding: 0.1rem 0.35rem;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 3px;
+      color: #888;
+      font-family: monospace;
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #444;
+      transition: background 0.3s;
+    }
+
+    .status-dot.live { background: #e53e3e; box-shadow: 0 0 6px #e53e3e; }
+    .status-dot.playing { background: #48bb78; box-shadow: 0 0 6px #48bb78; }
+
+    /* URL popover */
+    .url-popover-anchor { position: relative; }
+
+    .url-popover {
+      display: none;
+      position: absolute;
+      bottom: calc(100% + 10px);
+      right: 0;
+      width: 360px;
+      background: #161622;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      padding: 1rem;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+      z-index: 100;
+    }
+
+    .url-popover.open { display: block; }
+
+    .url-popover-label {
+      font-size: 0.75rem;
+      color: #888;
+      margin-bottom: 0.5rem;
+    }
+
+    .url-popover-row {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .url-popover input[type="text"] {
+      flex: 1;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 6px;
+      padding: 0.5rem 0.65rem;
+      color: #e0e0e0;
+      font-size: 0.8rem;
+      outline: none;
+      font-family: monospace;
+    }
+
+    .url-popover input[type="text"]:focus {
+      border-color: rgba(60, 130, 246, 0.5);
+    }
+
+    .url-popover input[type="text"]::placeholder { color: #555; }
+
+    .url-popover button {
+      padding: 0.5rem 0.85rem;
+      font-size: 0.8rem;
+    }
+
+    .url-popover-error {
+      font-size: 0.7rem;
+      color: #f87171;
+      margin-top: 0.4rem;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="stream-container">
+    <div class="stream-wrapper">
+      <div id="nasa-player"></div>
+    </div>
+  </div>
+
+  <div class="music-bar">
+    <div class="status-dot" id="music-status"></div>
+    <img id="music-thumb" class="music-thumb" src="" alt="">
+    <div class="music-info">
+      <span id="music-title" class="music-title">No track loaded</span>
+    </div>
+
+    <div class="controls">
+      <button id="play-btn" onclick="toggleMusic()">
+        <span id="play-icon">&#9654;</span> Play
+        <span class="kbd">M</span>
+      </button>
+
+      <button id="skip-btn" onclick="skipTrack()">
+        &#9197; Skip
+        <span class="kbd">N</span>
+      </button>
+
+      <button class="duck-btn" id="duck-btn" onclick="toggleDuck()">
+        Duck
+        <span class="kbd">D</span>
+      </button>
+    </div>
+
+    <div class="volume-group">
+      <span class="volume-icon" onclick="toggleMute()">&#128266;</span>
+      <input type="range" id="volume-slider" min="0" max="100" value="25"
+             oninput="setMusicVolume(this.value)">
+      <span id="volume-display" style="font-size:0.75rem; color:#888; width:2.5em; text-align:right;">25%</span>
+    </div>
+
+    <div class="url-popover-anchor">
+      <button id="change-url-btn" onclick="toggleUrlPopover()">
+        Change Music
+      </button>
+      <div class="url-popover" id="url-popover">
+        <div class="url-popover-label">Paste a YouTube video or playlist URL</div>
+        <div class="url-popover-row">
+          <input type="text" id="url-input" placeholder="https://www.youtube.com/watch?v=..."
+                 onkeydown="if(event.key==='Enter')loadMusicUrl()">
+          <button onclick="loadMusicUrl()">Load</button>
+        </div>
+        <div class="url-popover-error" id="url-error">Could not parse YouTube URL</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // State
+    let musicPlayer = null;
+    let nasaPlayer = null;
+    let isDucked = false;
+    let isMusicPlaying = false;
+    let normalVolume = 25;
+    let duckVolume = 5;
+    let duckTransitionTimer = null;
+
+    // YouTube IFrame API
+    const tag = document.createElement('script');
+    tag.src = 'https://www.youtube.com/iframe_api';
+    document.head.appendChild(tag);
+
+    function onYouTubeIframeAPIReady() {
+      nasaPlayer = new YT.Player('nasa-player', {
+        videoId: 'm3kR2KK8TEs',
+        playerVars: {
+          autoplay: 1,
+          modestbranding: 1,
+          rel: 0,
+        },
+        events: {
+          onReady: () => {
+            nasaPlayer.setVolume(100);
+          }
+        }
+      });
+
+      // Hidden music player element
+      const musicDiv = document.createElement('div');
+      musicDiv.id = 'music-player';
+      musicDiv.style.display = 'none';
+      document.body.appendChild(musicDiv);
+
+      musicPlayer = new YT.Player('music-player', {
+        videoId: 'yhlu-FS18Qo',
+        playerVars: {
+          autoplay: 0,
+          list: 'RDyhlu-FS18Qo',
+          listType: 'playlist',
+        },
+        events: {
+          onReady: () => {
+            musicPlayer.setVolume(normalVolume);
+          },
+          onStateChange: (e) => {
+            isMusicPlaying = e.data === YT.PlayerState.PLAYING;
+            updateUI();
+          }
+        }
+      });
+    }
+
+    // Controls
+    function toggleMusic() {
+      if (!musicPlayer) return;
+      if (isMusicPlaying) {
+        musicPlayer.pauseVideo();
+      } else {
+        musicPlayer.playVideo();
+      }
+    }
+
+    function skipTrack() {
+      if (!musicPlayer) return;
+      musicPlayer.nextVideo();
+    }
+
+    function toggleDuck() {
+      isDucked = !isDucked;
+      smoothVolume(isDucked ? duckVolume : normalVolume);
+      updateUI();
+    }
+
+    function setMusicVolume(val) {
+      normalVolume = parseInt(val);
+      if (!isDucked && musicPlayer) {
+        musicPlayer.setVolume(normalVolume);
+      }
+      document.getElementById('volume-display').textContent = val + '%';
+    }
+
+    function toggleMute() {
+      if (!musicPlayer) return;
+      if (musicPlayer.isMuted()) {
+        musicPlayer.unMute();
+      } else {
+        musicPlayer.mute();
+      }
+    }
+
+    // Smooth volume transition
+    function smoothVolume(target) {
+      if (!musicPlayer) return;
+      if (duckTransitionTimer) cancelAnimationFrame(duckTransitionTimer);
+
+      const start = musicPlayer.getVolume();
+      const duration = 400;
+      const startTime = performance.now();
+
+      function step(now) {
+        const elapsed = now - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        // Ease out cubic
+        const eased = 1 - Math.pow(1 - progress, 3);
+        const current = Math.round(start + (target - start) * eased);
+        musicPlayer.setVolume(current);
+        if (progress < 1) {
+          duckTransitionTimer = requestAnimationFrame(step);
+        }
+      }
+      duckTransitionTimer = requestAnimationFrame(step);
+    }
+
+    function updateUI() {
+      const playBtn = document.getElementById('play-btn');
+      const playIcon = document.getElementById('play-icon');
+      const duckBtn = document.getElementById('duck-btn');
+      const statusDot = document.getElementById('music-status');
+
+      if (isMusicPlaying) {
+        playIcon.innerHTML = '&#10074;&#10074;';
+        playBtn.lastChild.previousSibling.textContent = ' Pause ';
+        statusDot.classList.add('playing');
+      } else {
+        playIcon.innerHTML = '&#9654;';
+        playBtn.lastChild.previousSibling.textContent = ' Play ';
+        statusDot.classList.remove('playing');
+      }
+
+      if (isDucked) {
+        duckBtn.classList.add('ducked');
+        duckBtn.firstChild.textContent = 'Ducked';
+      } else {
+        duckBtn.classList.remove('ducked');
+        duckBtn.firstChild.textContent = 'Duck';
+      }
+    }
+
+    // Track info polling
+    let currentVideoUrl = '';
+
+    function updateTrackInfo() {
+      if (!musicPlayer || typeof musicPlayer.getVideoData !== 'function') return;
+      const data = musicPlayer.getVideoData();
+      const url = musicPlayer.getVideoUrl?.() || '';
+
+      if (url && url !== currentVideoUrl) {
+        currentVideoUrl = url;
+        const title = data.title || 'Unknown track';
+        const videoId = data.video_id;
+
+        document.getElementById('music-title').textContent = title;
+
+        if (videoId) {
+          document.getElementById('music-thumb').src =
+            `https://img.youtube.com/vi/${videoId}/default.jpg`;
+        }
+      }
+    }
+
+    setInterval(updateTrackInfo, 1000);
+
+    // URL popover
+    function toggleUrlPopover() {
+      const popover = document.getElementById('url-popover');
+      const isOpen = popover.classList.toggle('open');
+      if (isOpen) {
+        const input = document.getElementById('url-input');
+        input.value = '';
+        document.getElementById('url-error').style.display = 'none';
+        setTimeout(() => input.focus(), 50);
+      }
+    }
+
+    // Close popover on outside click
+    document.addEventListener('mousedown', (e) => {
+      const popover = document.getElementById('url-popover');
+      const anchor = e.target.closest('.url-popover-anchor');
+      if (!anchor && popover.classList.contains('open')) {
+        popover.classList.remove('open');
+      }
+    });
+
+    function parseYouTubeUrl(url) {
+      try {
+        const u = new URL(url);
+        let videoId = null;
+        let listId = null;
+
+        // Standard watch URL
+        if (u.hostname.includes('youtube.com')) {
+          videoId = u.searchParams.get('v');
+          listId = u.searchParams.get('list');
+        }
+        // Shortened youtu.be URL
+        if (u.hostname === 'youtu.be') {
+          videoId = u.pathname.slice(1);
+          listId = u.searchParams.get('list');
+        }
+        // Playlist-only URL
+        if (u.pathname === '/playlist') {
+          listId = u.searchParams.get('list');
+        }
+
+        if (!videoId && !listId) return null;
+        return { videoId, listId };
+      } catch {
+        return null;
+      }
+    }
+
+    function loadMusicUrl() {
+      const input = document.getElementById('url-input');
+      const errorEl = document.getElementById('url-error');
+      const parsed = parseYouTubeUrl(input.value.trim());
+
+      if (!parsed) {
+        errorEl.style.display = 'block';
+        return;
+      }
+      errorEl.style.display = 'none';
+
+      // Destroy old player and create fresh one
+      const wasPlaying = isMusicPlaying;
+      if (musicPlayer) {
+        musicPlayer.destroy();
+      }
+
+      currentVideoUrl = '';
+      document.getElementById('music-title').textContent = 'Loading...';
+      document.getElementById('music-thumb').src = '';
+
+      const musicDiv = document.createElement('div');
+      musicDiv.id = 'music-player';
+      musicDiv.style.display = 'none';
+      document.body.appendChild(musicDiv);
+
+      const playerVars = { autoplay: wasPlaying ? 1 : 0 };
+      if (parsed.listId) {
+        playerVars.list = parsed.listId;
+        playerVars.listType = 'playlist';
+      }
+
+      musicPlayer = new YT.Player('music-player', {
+        videoId: parsed.videoId || undefined,
+        playerVars,
+        events: {
+          onReady: () => {
+            musicPlayer.setVolume(isDucked ? duckVolume : normalVolume);
+          },
+          onStateChange: (e) => {
+            isMusicPlaying = e.data === YT.PlayerState.PLAYING;
+            updateUI();
+          }
+        }
+      });
+
+      document.getElementById('url-popover').classList.remove('open');
+    }
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      // Don't trigger if typing in an input
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+      switch (e.key.toLowerCase()) {
+        case 'd':
+          toggleDuck();
+          break;
+        case 'm':
+          toggleMusic();
+          break;
+        case 'n':
+          skipTrack();
+          break;
+      }
+    });
+  </script>
+</body>
+</html>
