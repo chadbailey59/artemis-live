@@ -86,8 +86,17 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      transition: opacity 0.3s;
     }
+
+    .music-link {
+      font-size: 0.7rem;
+      color: #667;
+      text-decoration: none;
+      white-space: nowrap;
+      transition: color 0.15s;
+    }
+
+    .music-link:hover { color: #7cb3ff; }
 
     .controls {
       display: flex;
@@ -249,6 +258,7 @@
     <img id="music-thumb" class="music-thumb" src="" alt="">
     <div class="music-info">
       <span id="music-title" class="music-title">No track loaded</span>
+      <a id="music-link" class="music-link" href="#" target="_blank" rel="noopener">Open on YouTube</a>
     </div>
 
     <div class="controls">
@@ -270,9 +280,9 @@
 
     <div class="volume-group">
       <span class="volume-icon" onclick="toggleMute()">&#128266;</span>
-      <input type="range" id="volume-slider" min="0" max="100" value="25"
+      <input type="range" id="volume-slider" min="0" max="100" value="12"
              oninput="setMusicVolume(this.value)">
-      <span id="volume-display" style="font-size:0.75rem; color:#888; width:2.5em; text-align:right;">25%</span>
+      <span id="volume-display" style="font-size:0.75rem; color:#888; width:2.5em; text-align:right;">12%</span>
     </div>
 
     <div class="url-popover-anchor">
@@ -297,9 +307,23 @@
     let nasaPlayer = null;
     let isDucked = false;
     let isMusicPlaying = false;
-    let normalVolume = 25;
-    let duckVolume = 5;
+    let normalVolume = 12;
     let duckTransitionTimer = null;
+
+    // Default music source
+    const defaultMusic = { videoId: 'yhlu-FS18Qo', listId: 'RDyhlu-FS18Qo' };
+
+    function getSavedMusic() {
+      try {
+        const saved = localStorage.getItem('artemis-music');
+        if (saved) return JSON.parse(saved);
+      } catch {}
+      return defaultMusic;
+    }
+
+    function saveMusic(videoId, listId) {
+      localStorage.setItem('artemis-music', JSON.stringify({ videoId, listId }));
+    }
 
     // YouTube IFrame API
     const tag = document.createElement('script');
@@ -327,13 +351,16 @@
       musicDiv.style.display = 'none';
       document.body.appendChild(musicDiv);
 
+      const saved = getSavedMusic();
+      const musicVars = { autoplay: 0 };
+      if (saved.listId) {
+        musicVars.list = saved.listId;
+        musicVars.listType = 'playlist';
+      }
+
       musicPlayer = new YT.Player('music-player', {
-        videoId: 'yhlu-FS18Qo',
-        playerVars: {
-          autoplay: 0,
-          list: 'RDyhlu-FS18Qo',
-          listType: 'playlist',
-        },
+        videoId: saved.videoId || undefined,
+        playerVars: musicVars,
         events: {
           onReady: () => {
             musicPlayer.setVolume(normalVolume);
@@ -363,7 +390,7 @@
 
     function toggleDuck() {
       isDucked = !isDucked;
-      smoothVolume(isDucked ? duckVolume : normalVolume);
+      smoothVolume(isDucked ? Math.round(normalVolume / 2) : normalVolume);
       updateUI();
     }
 
@@ -450,6 +477,8 @@
         if (videoId) {
           document.getElementById('music-thumb').src =
             `https://img.youtube.com/vi/${videoId}/default.jpg`;
+          document.getElementById('music-link').href =
+            `https://www.youtube.com/watch?v=${videoId}`;
         }
       }
     }
@@ -515,6 +544,7 @@
         return;
       }
       errorEl.style.display = 'none';
+      saveMusic(parsed.videoId, parsed.listId);
 
       // Destroy old player and create fresh one
       const wasPlaying = isMusicPlaying;
@@ -542,7 +572,7 @@
         playerVars,
         events: {
           onReady: () => {
-            musicPlayer.setVolume(isDucked ? duckVolume : normalVolume);
+            musicPlayer.setVolume(isDucked ? Math.round(normalVolume / 2) : normalVolume);
           },
           onStateChange: (e) => {
             isMusicPlaying = e.data === YT.PlayerState.PLAYING;
